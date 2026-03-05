@@ -2,27 +2,20 @@ from flask import Flask, request, jsonify, send_file
 import os
 import json
 import uuid
-from datetime import datetime
 import google.generativeai as genai
 from werkzeug.utils import secure_filename
-import requests
-import time
-import io
-import re
-import random
+import tempfile
 from pdf2image import convert_from_path
 import pytesseract
 from PyPDF2 import PdfReader
-import pandas as pd
 from fpdf import FPDF
-import textwrap
-import markdown
 import pdfkit
-from bs4 import BeautifulSoup
+from pydantic import ValidationError
+from schemas import GenerateQuestionsRequest, ExportPaperRequest, ConvertHtmlRequest
 
 # --- Basic App Configuration ---
 def init_app():
-    app = Flask(__name__, static_folder='static')
+    app = Flask(__name__)
     app.secret_key = os.urandom(24)
     app.config['UPLOAD_FOLDER'] = 'uploads/'
     app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100 MB max file size
@@ -710,9 +703,9 @@ def generate_markdown(questions, exam_title, include_answers=False):
         return error_path
 
 # --- API Routes ---
-@app.route('/')
-def index():
-    return app.send_static_file('index.html')
+@app.route('/api/health')
+def health_check():
+    return jsonify({"status": "healthy", "service": "Question Paper Gen API"})
 
 @app.route('/api/upload', methods=['POST'])
 def upload_file():
@@ -749,55 +742,38 @@ def upload_file():
 
 @app.route('/api/generate-questions', methods=['POST'])
 def generate_questions_api():
-    data = request.json
+    try:
+        data = GenerateQuestionsRequest(**request.json)
+    except ValidationError as e:
+        return jsonify({"error": "Invalid request payload", "details": e.errors()}), 400
     
-    # Get the file path
-    filename = data.get('filename')
-    if not filename:
-        return jsonify({"error": "No filename provided"}), 400
-    
-    # Clean the filename to ensure it's secure and properly formatted
-    filename = secure_filename(filename)
+    filename = secure_filename(data.filename)
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
     
-    print(f"Looking for file: {filepath}")
-    
     if not os.path.exists(filepath):
-        # List all files in the upload folder for debugging
         files_in_dir = os.listdir(app.config['UPLOAD_FOLDER'])
-        print(f"Files in upload folder: {files_in_dir}")
-        
-        # Try to find a case-insensitive match as a fallback
         for file in files_in_dir:
             if file.lower() == filename.lower():
                 filepath = os.path.join(app.config['UPLOAD_FOLDER'], file)
-                print(f"Found case-insensitive match: {filepath}")
                 break
         
-        # If still not found, return error
         if not os.path.exists(filepath):
             return jsonify({"error": f"File not found: {filename}"}), 404
     
-    # Process the file and get content
     content = process_file(filepath)
+    question_bank = data.question_bank
     
-    # Get existing question bank if provided
-    question_bank = data.get('question_bank', [])
-    
-    # Get the parameters
     params = {
-        'subject': data.get('subject', 'General'),
-        'topics': data.get('topics', []),
-        'difficulty': data.get('difficulty', 'Medium'),
-        'question_types': data.get('question_types', ['MCQ', 'Short Answer']),
-        'num_questions': int(data.get('num_questions', 10))
+        'subject': data.subject,
+        'topics': data.topics,
+        'difficulty': data.difficulty,
+        'question_types': data.question_types,
+        'num_questions': data.num_questions
     }
     
-    # Calculate how many questions to generate vs. select from bank
     num_from_bank = min(int(params['num_questions'] / 2), len(question_bank))
     num_to_generate = params['num_questions'] - num_from_bank
     
-    # Generate new questions
     gen_result = {"questions": []} if num_to_generate <= 0 else generate_questions(content, {**params, 'num_questions': num_to_generate})
     
     if not gen_result.get('success', False) and num_to_generate > 0:
@@ -821,35 +797,22 @@ def generate_questions_api():
 @app.route('/api/export', methods=['POST'])
 def export_paper():
     try:
-        # Check if the request is JSON or form data
-        if request.is_json:
-            data = request.json
-        else:
-            # Try to parse form data
-            data = {
-                'questions': request.form.get('questions', '[]'),
-                'format': request.form.get('format', 'pdf'),
-                'title': request.form.get('title', 'Exam Paper'),
-                'include_answers': request.form.get('include_answers', 'false').lower() == 'true'
-            }
-            # Convert string to JSON if needed
-            if isinstance(data['questions'], str):
-                try:
-                    data['questions'] = json.loads(data['questions'])
-                except json.JSONDecodeError as e:
-                    print(f"Failed to parse questions JSON: {str(e)}")
-                    return jsonify({"error": f"Invalid question data format: {str(e)}"}), 400
+        try:
+            req_data = ExportPaperRequest(**(request.json if request.is_json else request.form))
+        except ValidationError as e:
+            return jsonify({"error": "Invalid request payload", "details": e.errors()}), 400
         
-        questions = data.get('questions', [])
+        questions = req_data.questions
+        if isinstance(questions, str):
+            questions = json.loads(questions)
+            
         if not questions:
             return jsonify({"error": "No questions provided"}), 400
         
-        format_type = data.get('format', 'pdf')
-        exam_title = data.get('title', 'Exam Paper')
-        include_answers = data.get('include_answers', False)
-        
-        print(f"Exporting {len(questions)} questions in {format_type} format")
-        print(f"Title: {exam_title}, Include answers: {include_answers}")
+        format_type = req_data.format
+        exam_title = req_data.title
+        include_answers = str(req_data.include_answers).lower() == 'true' if isinstance(req_data.include_answers, str) else req_data.include_answers
+
         
         if format_type == 'pdf':
             output_path = generate_pdf(questions, exam_title, include_answers)
@@ -876,11 +839,12 @@ def export_paper():
 
 @app.route('/api/convert-html-to-pdf', methods=['POST'])
 def convert_html_to_pdf():
-    data = request.json
-    html_content = data.get('html')
-    
-    if not html_content:
-        return jsonify({"error": "No HTML content provided"}), 400
+    try:
+        req_data = ConvertHtmlRequest(**request.json)
+    except ValidationError as e:
+        return jsonify({"error": "Invalid request payload", "details": e.errors()}), 400
+
+    html_content = req_data.html
     
     try:
         # Save HTML to temporary file
@@ -931,26 +895,6 @@ def handle_exception(e):
 def ensure_directories():
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
     os.makedirs('temp_outputs', exist_ok=True)
-    os.makedirs('static/js', exist_ok=True)
-    
-    # Write main.js to static/js directory if it doesn't exist
-    js_path = os.path.join('static', 'js', 'main.js')
-    if not os.path.exists(js_path):
-        print("Creating main.js file in static/js directory")
-        with open(js_path, 'w', encoding='utf-8') as f:
-            f.write('// JavaScript file will be populated')
-    
-    # Check if index.html exists in static directory
-    index_path = os.path.join('static', 'index.html')
-    if not os.path.exists(index_path):
-        print("WARNING: index.html not found in static directory")
-        # Check if it exists in the current directory
-        if os.path.exists('index.html'):
-            print("Found index.html in current directory, copying to static directory")
-            import shutil
-            shutil.copy('index.html', index_path)
-        else:
-            print("ERROR: index.html not found. Please create this file in the static directory.")
 
 # --- Main Entry Point ---
 if __name__ == '__main__':
