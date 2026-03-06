@@ -11,11 +11,13 @@ from PyPDF2 import PdfReader
 from fpdf import FPDF
 import pdfkit
 from pydantic import ValidationError
+from flask_cors import CORS
 from schemas import GenerateQuestionsRequest, ExportPaperRequest, ConvertHtmlRequest
 
 # --- Basic App Configuration ---
 def init_app():
     app = Flask(__name__)
+    CORS(app)
     app.secret_key = os.urandom(24)
     app.config['UPLOAD_FOLDER'] = 'uploads/'
     app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100 MB max file size

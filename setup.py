@@ -22,6 +22,7 @@ def check_dependencies():
     if not os.path.exists('requirements.txt'):
         with open('requirements.txt', 'w') as f:
             f.write("""flask==2.3.3
+flask-cors==4.0.1
 google-generativeai==0.3.1
 Werkzeug==2.3.7
 requests==2.31.0
