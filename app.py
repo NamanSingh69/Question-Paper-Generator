@@ -5,8 +5,7 @@ import uuid
 import google.generativeai as genai
 from werkzeug.utils import secure_filename
 import tempfile
-from pdf2image import convert_from_path
-import pytesseract
+
 from PyPDF2 import PdfReader
 from fpdf import FPDF
 import pdfkit
@@ -100,21 +99,12 @@ def process_file(file_path):
 def extract_text_from_pdf(pdf_path):
     """Extract text from PDF files."""
     try:
-        # First try PyPDF2 (faster but may not work well with scanned PDFs)
         reader = PdfReader(pdf_path)
         text = ""
         for page in reader.pages:
             page_text = page.extract_text()
             if page_text:
                 text += page_text + "\n\n"
-        
-        # If PyPDF2 failed to extract meaningful text, try OCR
-        if len(text.strip()) < 100:  # Arbitrary threshold to detect failed extraction
-            text = ""
-            images = convert_from_path(pdf_path)
-            for i, image in enumerate(images):
-                page_text = pytesseract.image_to_string(image)
-                text += f"Page {i+1}:\n{page_text}\n\n"
         
         return text
     except Exception as e:
