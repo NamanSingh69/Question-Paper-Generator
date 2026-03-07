@@ -40,8 +40,8 @@ def configure_api():
     Queries the API to discover all available models and auto-selects the best.
     Get your free API key at: https://aistudio.google.com/app/apikey
     """
-    # Use fallback API key if none provided
-    GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "***REDACTED_API_KEY***")
+    # Use API key strictly from environment variable
+    GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
     
     if not GOOGLE_API_KEY:
         print("Warning: GOOGLE_API_KEY not set.")
