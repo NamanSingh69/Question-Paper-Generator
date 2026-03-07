@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, g
 import os
 import json
 import uuid
@@ -40,15 +40,14 @@ def configure_api():
     Queries the API to discover all available models and auto-selects the best.
     Get your free API key at: https://aistudio.google.com/app/apikey
     """
-    GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
+    # Use fallback API key if none provided
+    GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "***REDACTED_API_KEY***")
     
     if not GOOGLE_API_KEY:
-        raise ValueError(
-            "GOOGLE_API_KEY not set. Get a free key at: "
-            "https://aistudio.google.com/app/apikey"
-        )
+        print("Warning: GOOGLE_API_KEY not set.")
     
-    genai.configure(api_key=GOOGLE_API_KEY)
+    if GOOGLE_API_KEY:
+        genai.configure(api_key=GOOGLE_API_KEY)
 
     # Try dynamic model discovery first
     try:
@@ -157,7 +156,7 @@ def analyze_content(text, subject_name):
     """
     
     try:
-        response = model.generate_content(prompt)
+        response = genai.GenerativeModel(getattr(g, 'gemini_model_name', model.model_name)).generate_content(prompt)
         result = response.text
         
         print(f"Raw response from Gemini API: {result[:100]}...")
@@ -258,7 +257,7 @@ def generate_questions(content, params):
     """
     
     try:
-        response = model.generate_content(prompt)
+        response = genai.GenerativeModel(getattr(g, 'gemini_model_name', model.model_name)).generate_content(prompt)
         result = response.text
         
         print(f"Raw questions response from Gemini API: {result[:100]}...")
@@ -699,6 +698,15 @@ def generate_markdown(questions, exam_title, include_answers=False):
 def health_check():
     return jsonify({"status": "healthy", "service": "Question Paper Gen API"})
 
+@app.route('/api/models', methods=['GET'])
+def get_models():
+    try:
+        models = [m for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        model_list = [{"name": m.name, "displayName": getattr(m, 'display_name', m.name), "version": getattr(m, 'version', 'unknown')} for m in models]
+        return jsonify({"models": model_list})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/api/upload', methods=['POST'])
 def upload_file():
     if 'file' not in request.files:
@@ -887,6 +895,20 @@ def handle_exception(e):
 def ensure_directories():
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
     os.makedirs('temp_outputs', exist_ok=True)
+
+@app.before_request
+def configure_gemini_for_request():
+    if request.path.startswith('/api/'):
+        custom_key = request.headers.get('X-Gemini-Api-Key')
+        if custom_key:
+            genai.configure(api_key=custom_key)
+        else:
+            default_key = os.environ.get("GOOGLE_API_KEY", "***REDACTED_API_KEY***")
+            if default_key:
+                genai.configure(api_key=default_key)
+        
+        custom_model = request.headers.get('X-Gemini-Model-Name')
+        g.gemini_model_name = custom_model if custom_model else model.model_name
 
 # --- Main Entry Point ---
 if __name__ == '__main__':
