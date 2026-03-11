@@ -38,6 +38,10 @@ class GeminiClient {
         }
     }
 
+    getApiKey() {
+        return this.apiKey;
+    }
+
     setMode(mode) {
         this.selectedMode = mode;
         if (mode === 'pro') {
