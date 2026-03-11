@@ -244,34 +244,6 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
 
-        // --- NEW: Client-side word count validation for TXT/MD/JSON ---
-        // (For PDF and DOCX, it's harder to parse client-side without heavy libraries, so we estimate/allow them through)
-        if (file.type === 'text/plain' || file.type === 'text/markdown' || file.type === 'application/json') {
-            try {
-                const text = await file.text();
-                const wordCount = countWords(text);
-                
-                if (wordCount < 100) {
-                    showToast('Validation Error', `Content must be at least 100 words long. Current: ${wordCount} words.`);
-                    // Prevent enabling the analyze button
-                    state.uploadedFile = null;
-                    state.fileName = null;
-                    fileDetails.classList.add('d-none');
-                    fileInput.value = '';
-                    analyzeBtn.disabled = true;
-                    return; // Stop here
-                }
-            } catch (error) {
-                console.error("Error reading file client-side:", error);
-            }
-        } else if (file.type === 'application/pdf') {
-             // Basic size check for PDFs as an alternative to word count
-             if (file.size < 500) { // Extremely small PDF
-                  showToast('Validation Error', `Content must be at least 100 words long. The uploaded PDF is too small.`);
-                  return;
-             }
-        }
-
         // Update state
         state.uploadedFile = file;
         state.fileName = file.name;
@@ -282,11 +254,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
         // Enable analyze button if subject is also filled
         validateInputs();
-    }
-
-    function countWords(str) {
-        if (!str || str.trim().length === 0) return 0;
-        return str.trim().split(/\s+/).filter(word => word.length > 0).length;
     }
 
     function handleRemoveFile() {
