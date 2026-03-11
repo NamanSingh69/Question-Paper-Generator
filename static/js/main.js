@@ -77,35 +77,116 @@ document.addEventListener('DOMContentLoaded', function () {
     exportHtmlBtn.addEventListener('click', () => exportPaper('html'));
     exportMdBtn.addEventListener('click', () => exportPaper('md'));
 
-    // Fetch Models logic
-    const fetchModelsBtn = document.getElementById('fetch-models-btn');
+    // Mode and Rate Limit Logic
+    let currentMode = localStorage.getItem('gemini_mode') || 'pro';
+    const modeProBtn = document.getElementById('mode-pro');
+    const modeFastBtn = document.getElementById('mode-fast');
     const modelSelect = document.getElementById('model-select');
-    if (fetchModelsBtn) {
-        fetchModelsBtn.addEventListener('click', async () => {
-            fetchModelsBtn.disabled = true;
-            const originalHtml = fetchModelsBtn.innerHTML;
-            fetchModelsBtn.innerHTML = '<i class="spinner-border spinner-border-sm"></i>';
-            try {
-                const response = await fetch('/api/models');
-                const data = await response.json();
-                if (data.models && data.models.length > 0) {
-                    modelSelect.innerHTML = '<option value="">Auto (Default Best)</option>';
-                    data.models.forEach(m => {
-                        const opt = document.createElement('option');
-                        opt.value = m.name;
-                        opt.textContent = m.displayName;
-                        modelSelect.appendChild(opt);
-                    });
-                    showToast('Success', 'Models fetched successfully!');
-                }
-            } catch (err) {
-                showToast('Error', 'Failed to fetch models: ' + err.message);
-            } finally {
-                fetchModelsBtn.disabled = false;
-                fetchModelsBtn.innerHTML = originalHtml;
-            }
+    const quotaText = document.getElementById('quota-text');
+    const quotaFill = document.getElementById('quota-fill');
+    const apiKeyInput = document.getElementById('api-key-input');
+
+    const DAILY_LIMITS = {
+        "pro": { "3.1": 50, "2.5": 25 },
+        "flash": { "3.1": 500, "2.5": 250 },
+        "flash-lite": { "3.1": 1000, "2.5": 500 }
+    };
+
+    function updateQuotaDisplay() {
+        const stored = localStorage.getItem("qpg_rate_limits");
+        const today = new Date().toISOString().slice(0, 10);
+        let limits = { date: today, used: {} };
+        if (stored) {
+            const p = JSON.parse(stored);
+            if (p.date === today) limits = p;
+        }
+        const tier = currentMode === "pro" ? "pro" : "flash";
+        const limit = DAILY_LIMITS[tier]?.["2.5"] || 25;
+        const used = limits.used[tier] || 0;
+        const remaining = Math.max(0, limit - used);
+
+        quotaText.textContent = `Quota: ${remaining} / ${limit}`;
+        const pct = Math.max(0, Math.min(100, (remaining / limit) * 100));
+        quotaFill.style.width = pct + '%';
+
+        quotaFill.className = 'progress-bar bg-info';
+        quotaText.className = 'badge bg-info text-dark';
+        if (pct <= 50 && pct > 20) {
+            quotaFill.className = 'progress-bar bg-warning';
+            quotaText.className = 'badge bg-warning text-dark';
+        } else if (pct <= 20) {
+            quotaFill.className = 'progress-bar bg-danger';
+            quotaText.className = 'badge bg-danger';
+        }
+    }
+
+    function trackUsage(modelName) {
+        const tier = modelName.includes("pro") ? "pro" : modelName.includes("flash-lite") ? "flash-lite" : "flash";
+        const stored = localStorage.getItem("qpg_rate_limits");
+        const today = new Date().toISOString().slice(0, 10);
+        let limits = { date: today, used: {} };
+        if (stored) {
+            const p = JSON.parse(stored);
+            if (p.date === today) limits = p;
+        }
+        limits.used[tier] = (limits.used[tier] || 0) + 1;
+        localStorage.setItem("qpg_rate_limits", JSON.stringify(limits));
+        updateQuotaDisplay();
+    }
+
+    function setModeUI(mode) {
+        currentMode = mode;
+        localStorage.setItem('gemini_mode', mode);
+
+        if (mode === 'pro') {
+            modeProBtn.classList.replace('btn-outline-info', 'btn-info');
+            modeProBtn.style.color = '#05080f';
+            modeFastBtn.classList.replace('btn-info', 'btn-outline-info');
+            modeFastBtn.style.color = '';
+
+            modelSelect.innerHTML = `
+                <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+                <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro</option>
+            `;
+        } else {
+            modeFastBtn.classList.replace('btn-outline-info', 'btn-info');
+            modeFastBtn.style.color = '#05080f';
+            modeProBtn.classList.replace('btn-info', 'btn-outline-info');
+            modeProBtn.style.color = '';
+
+            modelSelect.innerHTML = `
+                <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                <option value="gemini-3.1-flash-lite-preview">Gemini 3.1 Flash Lite</option>
+            `;
+        }
+
+        const savedModel = localStorage.getItem('gemini_model');
+        if (savedModel && Array.from(modelSelect.options).some(o => o.value === savedModel)) {
+            modelSelect.value = savedModel;
+        }
+        updateQuotaDisplay();
+    }
+
+    if (modeProBtn && modeFastBtn) {
+        modeProBtn.addEventListener('click', () => setModeUI('pro'));
+        modeFastBtn.addEventListener('click', () => setModeUI('fast'));
+    }
+
+    if (modelSelect) {
+        modelSelect.addEventListener('change', (e) => {
+            localStorage.setItem('gemini_model', e.target.value);
         });
     }
+
+    if (apiKeyInput) {
+        apiKeyInput.value = localStorage.getItem('gemini_api_key') || '';
+        apiKeyInput.addEventListener('change', (e) => {
+            localStorage.setItem('gemini_api_key', e.target.value);
+        });
+    }
+
+    // Initialize UI
+    setModeUI(currentMode);
 
     // Helper for API headers
     function getApiHeaders() {
@@ -148,7 +229,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
-    function processFile(file) {
+    async function processFile(file) {
         // Check file type
         const validTypes = [
             'application/pdf',
@@ -163,6 +244,34 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
 
+        // --- NEW: Client-side word count validation for TXT/MD/JSON ---
+        // (For PDF and DOCX, it's harder to parse client-side without heavy libraries, so we estimate/allow them through)
+        if (file.type === 'text/plain' || file.type === 'text/markdown' || file.type === 'application/json') {
+            try {
+                const text = await file.text();
+                const wordCount = countWords(text);
+                
+                if (wordCount < 100) {
+                    showToast('Validation Error', `Content must be at least 100 words long. Current: ${wordCount} words.`);
+                    // Prevent enabling the analyze button
+                    state.uploadedFile = null;
+                    state.fileName = null;
+                    fileDetails.classList.add('d-none');
+                    fileInput.value = '';
+                    analyzeBtn.disabled = true;
+                    return; // Stop here
+                }
+            } catch (error) {
+                console.error("Error reading file client-side:", error);
+            }
+        } else if (file.type === 'application/pdf') {
+             // Basic size check for PDFs as an alternative to word count
+             if (file.size < 500) { // Extremely small PDF
+                  showToast('Validation Error', `Content must be at least 100 words long. The uploaded PDF is too small.`);
+                  return;
+             }
+        }
+
         // Update state
         state.uploadedFile = file;
         state.fileName = file.name;
@@ -173,6 +282,11 @@ document.addEventListener('DOMContentLoaded', function () {
 
         // Enable analyze button if subject is also filled
         validateInputs();
+    }
+
+    function countWords(str) {
+        if (!str || str.trim().length === 0) return 0;
+        return str.trim().split(/\s+/).filter(word => word.length > 0).length;
     }
 
     function handleRemoveFile() {
@@ -202,12 +316,50 @@ document.addEventListener('DOMContentLoaded', function () {
 
         showProgress();
 
-        // Create form data
-        const formData = new FormData();
-        formData.append('file', state.uploadedFile);
-        formData.append('subject', subjectInput.value.trim());
-
         try {
+            // STEP 1: Direct Browser Upload to Gemini (Bypasses Vercel 4.5MB limit)
+            const file = state.uploadedFile;
+            const apiKey = window.gemini ? window.gemini.getApiKey() : (document.getElementById('api-key-input')?.value?.trim() || '');
+            
+            // We need an array buffer to upload natively
+            const arrayBuffer = await file.arrayBuffer();
+
+            let uploadResponseData = null;
+            let fileUri = null;
+            let mimeType = file.type;
+
+            // If we have an API key, we upload directly from Browser
+            if (apiKey) {
+                console.log("Starting Browser-Direct Upload to Gemini...");
+                const uploadRes = await fetch(`https://generativelanguage.googleapis.com/upload/v1beta/files?uploadType=media&key=${apiKey}`, {
+                    method: 'POST',
+                    headers: { 'X-Goog-Upload-Command': 'start, upload, finalize', 'X-Goog-Upload-Header-Content-Length': file.size.toString(), 'X-Goog-Upload-Header-Content-Type': file.type, 'Content-Type': file.type },
+                    body: arrayBuffer
+                });
+
+                if (!uploadRes.ok) {
+                    const err = await uploadRes.json();
+                    throw new Error(`Direct upload failed: ${err.error?.message || uploadRes.statusText}`);
+                }
+                uploadResponseData = await uploadRes.json();
+                fileUri = uploadResponseData.file.uri;
+                console.log("Browser-Direct Upload Success! URI:", fileUri);
+            } 
+
+            // STEP 2: Send the File URI (or the file itself if no key) to our Backend
+            const formData = new FormData();
+            formData.append('subject', subjectInput.value.trim());
+            
+            if (fileUri) {
+                // If direct upload succeeded, just send the URI and metadata
+                formData.append('file_uri', fileUri);
+                formData.append('mime_type', mimeType);
+                formData.append('filename', file.name);
+            } else {
+                 // Fallback to Vercel native upload (will fail if > 4.5MB)
+                 formData.append('file', file);
+            }
+
             const headers = getApiHeaders();
             const response = await fetch('/api/upload', {
                 method: 'POST',
@@ -217,18 +369,33 @@ document.addEventListener('DOMContentLoaded', function () {
 
             const data = await response.json();
 
+            if (!response.ok) {
+                if (response.status === 429) {
+                    throw new Error("⏳ Rate limit reached — try again in ~1 minute, or switch to Fast mode.");
+                }
+                throw new Error(data.error || 'Failed to analyze file');
+            }
+
             if (!data.success) {
                 throw new Error(data.error || 'Failed to analyze file');
+            }
+
+            if (window.gemini) {
+               window.gemini._trackUsage(window.gemini.selectedModel);
+            } else {
+               trackUsage(getApiHeaders()['X-Gemini-Model-Name'] || 'gemini-2.5-pro');
             }
 
             // Update state
             state.subject = subjectInput.value.trim();
             state.topics = data.topics || [];
             state.selectedTopics = [...state.topics]; // Initially select all
-            state.fileName = data.filename; // Make sure we use the filename returned by the server
+            state.fileName = data.filename || file.name; 
+            state.fileUri = data.file_uri || fileUri; // Store the URI for later question generation
+            state.mimeType = data.mime_type || mimeType;
 
             // Update content preview
-            contentPreview.textContent = data.content_preview;
+            contentPreview.textContent = data.content_preview || "Content analyzed successfully via Gemini native upload.";
 
             // Render topics in step 2
             renderTopics();
@@ -237,6 +404,7 @@ document.addEventListener('DOMContentLoaded', function () {
             navigateToStep(2);
 
         } catch (error) {
+            console.error("Analyze error:", error);
             showToast('Error', error.message);
         } finally {
             hideProgress();
@@ -315,6 +483,14 @@ document.addEventListener('DOMContentLoaded', function () {
         showProgress();
         console.log("Generating questions with filename:", state.fileName);
 
+        // --- UI/UX Mandate: Show Skeleton Loader ---
+        const skeletonContainer = document.getElementById('skeleton-container');
+        skeletonContainer.classList.remove('d-none');
+        questionsContainer.innerHTML = ''; // Clear previous questions and hide empty state
+        
+        // Navigate to Step 3 early so the user sees the skeleton loading state
+        navigateToStep(3);
+
         // Get parameter values
         const difficulty = document.getElementById('difficulty-select').value;
         const questionTypes = Array.from(questionTypeCheckboxes).map(cb => cb.value);
@@ -323,6 +499,8 @@ document.addEventListener('DOMContentLoaded', function () {
         try {
             const requestData = {
                 filename: state.fileName,
+                file_uri: state.fileUri || null,
+                mime_type: state.mimeType || null,
                 subject: state.subject,
                 topics: topics,
                 difficulty: difficulty,
@@ -343,6 +521,9 @@ document.addEventListener('DOMContentLoaded', function () {
             });
 
             if (!response.ok) {
+                if (response.status === 429) {
+                    throw new Error("⏳ Rate limit reached — try again in ~1 minute, or switch to Fast mode.");
+                }
                 const errorText = await response.text();
                 throw new Error(`Server error (${response.status}): ${errorText}`);
             }
@@ -352,6 +533,8 @@ document.addEventListener('DOMContentLoaded', function () {
             if (!data.success) {
                 throw new Error(data.error || 'Failed to generate questions');
             }
+
+            trackUsage(requestData.model_name || getApiHeaders()['X-Gemini-Model-Name'] || 'gemini-2.5-pro');
 
             // Update state
             state.generatedQuestions = data.questions;
@@ -364,17 +547,20 @@ document.addEventListener('DOMContentLoaded', function () {
             // Render questions
             renderQuestions();
 
-            // Navigate to step 3
-            navigateToStep(3);
-
         } catch (error) {
             showToast('Error', error.message);
+            // Hide skeleton on error so they aren't stuck on loading UI
+            document.getElementById('skeleton-container').classList.add('d-none');
         } finally {
             hideProgress();
         }
     }
 
     function renderQuestions() {
+        // --- UI/UX Mandate: Hide Skeleton Loader ---
+        const skeletonContainer = document.getElementById('skeleton-container');
+        skeletonContainer.classList.add('d-none');
+
         questionsContainer.innerHTML = '';
 
         if (state.generatedQuestions.length === 0) {

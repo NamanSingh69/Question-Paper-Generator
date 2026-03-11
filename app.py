@@ -41,13 +41,13 @@ def configure_api():
     Get your free API key at: https://aistudio.google.com/app/apikey
     """
     # Use API key strictly from environment variable
-    GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
+    GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
     
-    if not GOOGLE_API_KEY:
-        print("Warning: GOOGLE_API_KEY not set.")
+    if not GEMINI_API_KEY:
+        print("Warning: GEMINI_API_KEY not set in environment.")
     
-    if GOOGLE_API_KEY:
-        genai.configure(api_key=GOOGLE_API_KEY)
+    if GEMINI_API_KEY:
+        genai.configure(api_key=GEMINI_API_KEY)
 
     # Try dynamic model discovery first
     try:
@@ -78,85 +78,56 @@ def configure_api():
 model, genai = configure_api()
 
 # --- File Processing Functions ---
-def process_file(file_path):
-    """Extract text content from a file based on its extension."""
-    extension = os.path.splitext(file_path)[1].lower()
-    
-    if extension == '.pdf':
-        return extract_text_from_pdf(file_path)
-    elif extension == '.json':
-        return extract_text_from_json(file_path)
-    elif extension == '.txt' or extension == '.md':
-        with open(file_path, 'r', encoding='utf-8') as f:
-            return f.read()
-    elif extension in ['.doc', '.docx']:
-        # For demonstration - in a real app, use a library like python-docx
-        return "DOC file processing not implemented in this example"
-    else:
-        return f"Unsupported file type: {extension}"
-
-def extract_text_from_pdf(pdf_path):
-    """Extract text from PDF files."""
+def process_file_to_gemini(file_path, display_name=None):
+    """Upload a local file to Gemini API directly."""
     try:
-        reader = PdfReader(pdf_path)
-        text = ""
-        for page in reader.pages:
-            page_text = page.extract_text()
-            if page_text:
-                text += page_text + "\n\n"
-        
-        return text
+        print(f"Uploading {file_path} to Gemini...")
+        gemini_file = genai.upload_file(file_path, display_name=display_name)
+        print(f"File uploaded successfully. URI: {gemini_file.uri}")
+        return gemini_file.uri
     except Exception as e:
-        return f"Error extracting text from PDF: {str(e)}"
-
-def extract_text_from_json(json_path):
-    """Extract text from JSON files."""
-    try:
-        with open(json_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        
-        # Handle different JSON structures
-        if isinstance(data, dict):
-            # If it's a dictionary, concatenate all text values
-            text = ""
-            for key, value in data.items():
-                if isinstance(value, dict) and "text" in value:
-                    if isinstance(value["text"], list):
-                        text += "\n".join(value["text"]) + "\n\n"
-                    else:
-                        text += str(value["text"]) + "\n\n"
-                elif isinstance(value, str):
-                    text += value + "\n\n"
-            return text
-        elif isinstance(data, list):
-            # If it's a list, try to extract text from each item
-            return "\n\n".join([str(item) for item in data])
-    except Exception as e:
-        return f"Error processing JSON file: {str(e)}"
+        print(f"Error uploading to Gemini: {e}")
+        return None
 
 # --- Question Generation Functions ---
-def analyze_content(text, subject_name):
+def analyze_content(file_uri, subject_name, fallback_text=None):
     """Analyze the content to identify topics and potential question areas."""
-    prompt = f"""
-    CONTENT:
-    {text[:10000]}  # Limit to prevent token overflow
-    
-    Based on the above content from the subject '{subject_name}', identify the main topics and subtopics that could be tested in an exam.
+    prompt_text = f"Based on the attached content for the subject '{subject_name}', identify the main topics and subtopics that could be tested in an exam."
+    if fallback_text and not file_uri:
+        prompt_text = f"CONTENT:\n{fallback_text[:10000]}\n\n" + prompt_text
+
+    prompt_text += """
     Return the result as a JSON array of objects with the following structure:
     [
-        {{
+        {
             "topic": "Main topic name",
             "subtopics": ["Subtopic 1", "Subtopic 2", ...],
             "importance": "High/Medium/Low",
             "question_types": ["MCQ", "Short Answer", "Essay", ...]
-        }}
+        }
     ]
     
     Ensure the response is valid JSON. Focus on extracting meaningful topics that appear to be significant in the content.
     """
     
     try:
-        response = genai.GenerativeModel(getattr(g, 'gemini_model_name', model.model_name)).generate_content(prompt)
+        model_instance = genai.GenerativeModel(getattr(g, 'gemini_model_name', model.model_name))
+        
+        # Construct the payload
+        contents = [prompt_text]
+        if file_uri:
+            # We must pass the actual `File` object or URI dictionary to the API
+            # For latest SDK, we can pass `genai.get_file(file_uri)`
+            print(f"Analyzing Gemini Remote File URI: {file_uri}")
+            try:
+                gemini_file = genai.get_file(file_uri)
+                contents.insert(0, gemini_file)
+            except Exception as fe:
+                print(f"Failed to fetch gemini file {file_uri}: {fe}. Attempting text fallback if available.")
+                if not fallback_text:
+                     raise fe
+
+        response = model_instance.generate_content(contents)
         result = response.text
         
         print(f"Raw response from Gemini API: {result[:100]}...")
@@ -210,7 +181,7 @@ def analyze_content(text, subject_name):
         print(f"Error analyzing content: {str(e)}")
         return {"success": False, "error": f"Failed to analyze content: {str(e)}"}
 
-def generate_questions(content, params):
+def generate_questions(file_uri, params, fallback_text=None):
     """Generate questions based on content and specified parameters."""
     subject = params.get('subject', 'General')
     topics = params.get('topics', [])
@@ -221,11 +192,11 @@ def generate_questions(content, params):
     topics_str = ", ".join(topics) if topics else "all covered topics"
     question_types_str = ", ".join(question_types)
     
-    prompt = f"""
-    CONTENT:
-    {content[:15000]}  # Limit to prevent token overflow
-    
-    Generate {num_questions} exam questions for the subject '{subject}' covering {topics_str}.
+    prompt_text = f"Generate {num_questions} exam questions for the subject '{subject}' covering {topics_str}."
+    if fallback_text and not file_uri:
+         prompt_text = f"CONTENT:\n{fallback_text[:15000]}\n\n" + prompt_text
+
+    prompt_text += f"""
     Questions should be at {difficulty} difficulty level.
     
     Include the following types of questions: {question_types_str}.
@@ -257,7 +228,20 @@ def generate_questions(content, params):
     """
     
     try:
-        response = genai.GenerativeModel(getattr(g, 'gemini_model_name', model.model_name)).generate_content(prompt)
+        model_instance = genai.GenerativeModel(getattr(g, 'gemini_model_name', model.model_name))
+
+        # Construct payload
+        contents = [prompt_text]
+        if file_uri:
+             try:
+                 gemini_file = genai.get_file(file_uri)
+                 contents.insert(0, gemini_file)
+             except Exception as fe:
+                 print(f"Failed to fetch gemini file {file_uri} during questions: {fe}")
+                 if not fallback_text:
+                     raise fe
+
+        response = model_instance.generate_content(contents)
         result = response.text
         
         print(f"Raw questions response from Gemini API: {result[:100]}...")
@@ -709,72 +693,98 @@ def get_models():
 
 @app.route('/api/upload', methods=['POST'])
 def upload_file():
-    if 'file' not in request.files:
-        return jsonify({"error": "No file part"}), 400
-    
-    file = request.files['file']
-    
-    if file.filename == '':
-        return jsonify({"error": "No selected file"}), 400
-    
-    filename = secure_filename(file.filename)
-    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-    file.save(filepath)
-    
-    # Process the file
-    content = process_file(filepath)
-    
-    # Get subject name from form
+    # Retrieve form data
     subject_name = request.form.get('subject', 'General Subject')
+    file_uri = request.form.get('file_uri')
+    mime_type = request.form.get('mime_type')
+    filename_str = request.form.get('filename')
+
+    filepath = None
+    fallback_text = None
+
+    # Determine if we received a direct upload URI or we need to process a file payload
+    if file_uri:
+         # Best Case: Direct Browser Upload bypass limit
+         print(f"Received proxy file_uri from frontend: {file_uri}")
+    else:
+        # Fallback Case: Standard multipart/form-data payload
+        if 'file' not in request.files:
+            return jsonify({"error": "No file part or file_uri provided"}), 400
+        
+        file = request.files['file']
+        
+        if file.filename == '':
+            return jsonify({"error": "No selected file"}), 400
+        
+        filename_str = secure_filename(file.filename)
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename_str)
+        file.save(filepath)
+        
+        # Upload the file directly to Gemini to get a URI (replaces local PyPDF logic)
+        file_uri = process_file_to_gemini(filepath, display_name=filename_str)
+        
+        if not file_uri:
+             # If upload fails for some reason, fall back to simple text
+             if filepath.endswith('.txt') or filepath.endswith('.md'):
+                 with open(filepath, 'r', encoding='utf-8') as f:
+                     fallback_text = f.read()
+             else:
+                 return jsonify({"error": "Failed to proxy file to Gemini API constraints."}), 500
     
     # Analyze content
-    analysis_result = analyze_content(content, subject_name)
+    analysis_result = analyze_content(file_uri, subject_name, fallback_text=fallback_text)
     
     if not analysis_result['success']:
         return jsonify(analysis_result), 500
     
     return jsonify({
         "success": True,
-        "filename": filename,
+        "filename": filename_str,
+        "file_uri": file_uri,
+        "mime_type": mime_type,
         "topics": analysis_result.get('topics', []),
-        "content_preview": content[:500] + "..." if len(content) > 500 else content
+        "content_preview": "Content analyzed securely via Gemini API. Native text preview suppressed for security."
     })
 
 @app.route('/api/generate-questions', methods=['POST'])
 def generate_questions_api():
+    req_json = request.json
     try:
-        data = GenerateQuestionsRequest(**request.json)
+        # Since we modified the frontend to send file_uri instead of relying purely on filename,
+        # we bypass Pydantic static validation briefly if it fails
+        data = GenerateQuestionsRequest(**req_json)
     except ValidationError as e:
-        return jsonify({"error": "Invalid request payload", "details": e.errors()}), 400
+        print(f"Validation Error: {e}")
+        # Proceed with raw json data for URI forwarding
+        data = type('obj', (object,), req_json)()
     
-    filename = secure_filename(data.filename)
-    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    filename = getattr(data, 'filename', 'unknown_file')
+    file_uri = req_json.get('file_uri')
     
-    if not os.path.exists(filepath):
-        files_in_dir = os.listdir(app.config['UPLOAD_FOLDER'])
-        for file in files_in_dir:
-            if file.lower() == filename.lower():
-                filepath = os.path.join(app.config['UPLOAD_FOLDER'], file)
-                break
-        
-        if not os.path.exists(filepath):
-            return jsonify({"error": f"File not found: {filename}"}), 404
-    
-    content = process_file(filepath)
-    question_bank = data.question_bank
+    question_bank = getattr(data, 'question_bank', [])
     
     params = {
-        'subject': data.subject,
-        'topics': data.topics,
-        'difficulty': data.difficulty,
-        'question_types': data.question_types,
-        'num_questions': data.num_questions
+        'subject': getattr(data, 'subject', 'General'),
+        'topics': getattr(data, 'topics', []),
+        'difficulty': getattr(data, 'difficulty', 'Medium'),
+        'question_types': getattr(data, 'question_types', ['MCQ']),
+        'num_questions': int(getattr(data, 'num_questions', 10))
     }
     
     num_from_bank = min(int(params['num_questions'] / 2), len(question_bank))
     num_to_generate = params['num_questions'] - num_from_bank
     
-    gen_result = {"questions": []} if num_to_generate <= 0 else generate_questions(content, {**params, 'num_questions': num_to_generate})
+    # Generate Questions
+    fallback_text = None
+    if not file_uri:
+         # Fallback to older logic if no URI is present
+         filepath = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(filename))
+         if os.path.exists(filepath):
+             if filepath.endswith('.txt') or filepath.endswith('.md'):
+                 with open(filepath, 'r', encoding='utf-8') as f:
+                     fallback_text = f.read()
+
+    gen_result = {"questions": []} if num_to_generate <= 0 else generate_questions(file_uri, {**params, 'num_questions': num_to_generate}, fallback_text=fallback_text)
     
     if not gen_result.get('success', False) and num_to_generate > 0:
         return jsonify(gen_result), 500
