@@ -152,7 +152,17 @@ def analyze_content(file_uri, subject_name, fallback_text=None, subject_details=
                 if not fallback_text:
                      raise fe
 
-        response = model_instance.generate_content(contents)
+        try:
+            response = model_instance.generate_content(contents)
+        except Exception as e:
+            error_str = str(e).lower()
+            if '429' in error_str or 'quota' in error_str:
+                print("⚠️ Primary model quota exceeded! Falling back to Gemini 3.1 Flash Lite...")
+                fallback_model = genai.GenerativeModel('gemini-3.1-flash-lite')
+                response = fallback_model.generate_content(contents)
+            else:
+                raise e
+                
         result = response.text
         
         print(f"Raw response from Gemini API: {result[:100]}...")
@@ -272,7 +282,17 @@ def generate_questions(file_uri, params, fallback_text=None):
                  if not fallback_text:
                      raise fe
 
-        response = model_instance.generate_content(contents)
+        try:
+            response = model_instance.generate_content(contents)
+        except Exception as e:
+            error_str = str(e).lower()
+            if '429' in error_str or 'quota' in error_str:
+                print("⚠️ Primary model quota exceeded during generation! Falling back to Gemini 3.1 Flash Lite...")
+                fallback_model = genai.GenerativeModel('gemini-3.1-flash-lite')
+                response = fallback_model.generate_content(contents)
+            else:
+                raise e
+                
         result = response.text
         
         print(f"Raw questions response from Gemini API: {result[:100]}...")

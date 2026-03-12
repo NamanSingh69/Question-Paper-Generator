@@ -78,105 +78,8 @@ document.addEventListener('DOMContentLoaded', function () {
     exportHtmlBtn.addEventListener('click', () => exportPaper('html'));
     exportMdBtn.addEventListener('click', () => exportPaper('md'));
 
-    // Mode and Rate Limit Logic
-    let currentMode = localStorage.getItem('gemini_mode') || 'pro';
-    const modeProBtn = document.getElementById('mode-pro');
-    const modeFastBtn = document.getElementById('mode-fast');
-    const modelSelect = document.getElementById('model-select');
-    const quotaText = document.getElementById('quota-text');
-    const quotaFill = document.getElementById('quota-fill');
+    // Simple key listener for local saving if needed
     const apiKeyInput = document.getElementById('api-key-input');
-
-    const DAILY_LIMITS = {
-        "pro": { "3.1": 50, "2.5": 50 },
-        "flash": { "3.1": 1500, "2.5": 1500 },
-        "flash-lite": { "3.1": 1500, "2.5": 1500 }
-    };
-
-    function updateQuotaDisplay() {
-        const stored = localStorage.getItem("qpg_rate_limits");
-        const today = new Date().toISOString().slice(0, 10);
-        let limits = { date: today, used: {} };
-        if (stored) {
-            const p = JSON.parse(stored);
-            if (p.date === today) limits = p;
-        }
-        const tier = currentMode === "pro" ? "pro" : "flash";
-        const limit = DAILY_LIMITS[tier]?.["2.5"] || 25;
-        const used = limits.used[tier] || 0;
-        const remaining = Math.max(0, limit - used);
-
-        quotaText.textContent = `Quota: ${remaining} / ${limit}`;
-        const pct = Math.max(0, Math.min(100, (remaining / limit) * 100));
-        quotaFill.style.width = pct + '%';
-
-        quotaFill.className = 'progress-bar bg-info';
-        quotaText.className = 'badge bg-info text-dark';
-        if (pct <= 50 && pct > 20) {
-            quotaFill.className = 'progress-bar bg-warning';
-            quotaText.className = 'badge bg-warning text-dark';
-        } else if (pct <= 20) {
-            quotaFill.className = 'progress-bar bg-danger';
-            quotaText.className = 'badge bg-danger';
-        }
-    }
-
-    function trackUsage(modelName) {
-        const tier = modelName.includes("pro") ? "pro" : modelName.includes("flash-lite") ? "flash-lite" : "flash";
-        const stored = localStorage.getItem("qpg_rate_limits");
-        const today = new Date().toISOString().slice(0, 10);
-        let limits = { date: today, used: {} };
-        if (stored) {
-            const p = JSON.parse(stored);
-            if (p.date === today) limits = p;
-        }
-        limits.used[tier] = (limits.used[tier] || 0) + 1;
-        localStorage.setItem("qpg_rate_limits", JSON.stringify(limits));
-        updateQuotaDisplay();
-    }
-
-    function setModeUI(mode) {
-        currentMode = mode;
-        localStorage.setItem('gemini_mode', mode);
-
-        if (mode === 'pro') {
-            modeProBtn.classList.replace('btn-outline-info', 'btn-info');
-            modeProBtn.style.color = '#05080f';
-            modeFastBtn.classList.replace('btn-info', 'btn-outline-info');
-            modeFastBtn.style.color = '';
-
-            modelSelect.innerHTML = `
-                <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro</option>
-            `;
-        } else {
-            modeFastBtn.classList.replace('btn-outline-info', 'btn-info');
-            modeFastBtn.style.color = '#05080f';
-            modeProBtn.classList.replace('btn-info', 'btn-outline-info');
-            modeProBtn.style.color = '';
-
-            modelSelect.innerHTML = `
-                <option value="gemini-3.1-flash-lite-preview">Gemini 3.1 Flash Lite</option>
-            `;
-        }
-
-        const savedModel = localStorage.getItem('gemini_model');
-        if (savedModel && Array.from(modelSelect.options).some(o => o.value === savedModel)) {
-            modelSelect.value = savedModel;
-        }
-        updateQuotaDisplay();
-    }
-
-    if (modeProBtn && modeFastBtn) {
-        modeProBtn.addEventListener('click', () => setModeUI('pro'));
-        modeFastBtn.addEventListener('click', () => setModeUI('fast'));
-    }
-
-    if (modelSelect) {
-        modelSelect.addEventListener('change', (e) => {
-            localStorage.setItem('gemini_model', e.target.value);
-        });
-    }
-
     if (apiKeyInput) {
         apiKeyInput.value = localStorage.getItem('gemini_api_key') || '';
         apiKeyInput.addEventListener('change', (e) => {
@@ -331,7 +234,7 @@ document.addEventListener('DOMContentLoaded', function () {
                  formData.append('file', file);
             }
 
-            const headers = getApiHeaders();
+            const headers = window.gemini ? window.gemini.getAuthHeaders() : {};
             const response = await fetch('/api/upload', {
                 method: 'POST',
                 headers: headers,
@@ -351,11 +254,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 throw new Error(data.error || 'Failed to analyze file');
             }
 
-            if (window.gemini) {
-               window.gemini._trackUsage(window.gemini.selectedModel);
-            } else {
-               trackUsage(getApiHeaders()['X-Gemini-Model-Name'] || 'gemini-2.5-pro');
-            }
+
 
             // Update state
             state.subject = subjectInput.value.trim();
@@ -490,7 +389,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    ...getApiHeaders()
+                    ...(window.gemini ? window.gemini.getAuthHeaders() : {})
                 },
                 body: JSON.stringify(requestData)
             });
@@ -509,7 +408,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 throw new Error(data.error || 'Failed to generate questions');
             }
 
-            trackUsage(requestData.model_name || getApiHeaders()['X-Gemini-Model-Name'] || 'gemini-2.5-pro');
+
 
             // Update state
             state.generatedQuestions = data.questions;
