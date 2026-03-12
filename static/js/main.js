@@ -145,8 +145,7 @@ document.addEventListener('DOMContentLoaded', function () {
             modeFastBtn.style.color = '';
 
             modelSelect.innerHTML = `
-                <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
-                <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro</option>
+                <option value="gemini-3.1-pro">Gemini 3.1 Pro</option>
             `;
         } else {
             modeFastBtn.classList.replace('btn-outline-info', 'btn-info');
@@ -156,7 +155,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
             modelSelect.innerHTML = `
                 <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite</option>
-                <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
             `;
         }
 
