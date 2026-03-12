@@ -77,6 +77,17 @@ def configure_api():
 
 model, genai = configure_api()
 
+def extract_gemini_file_id(file_uri):
+    """Extracts the file ID from a full URI to prevent length errors."""
+    if not file_uri:
+        return None
+    file_id = str(file_uri)
+    if "https://" in file_id:
+        file_id = file_id.split("/")[-1]
+    if not file_id.startswith("files/"):
+        file_id = f"files/{file_id}"
+    return file_id
+
 # --- File Processing Functions ---
 def process_file_to_gemini(file_path, display_name=None):
     """Upload a local file to Gemini API directly."""
@@ -92,9 +103,12 @@ def process_file_to_gemini(file_path, display_name=None):
 # --- Question Generation Functions ---
 def analyze_content(file_uri, subject_name, fallback_text=None):
     """Analyze the content to identify topics and potential question areas."""
-    prompt_text = f"Based on the attached content for the subject '{subject_name}', identify the main topics and subtopics that could be tested in an exam."
-    if fallback_text and not file_uri:
-        prompt_text = f"CONTENT:\n{fallback_text[:10000]}\n\n" + prompt_text
+    if file_uri or fallback_text:
+        prompt_text = f"Based on the attached content for the subject '{subject_name}', identify the main topics and subtopics that could be tested in an exam."
+        if fallback_text and not file_uri:
+            prompt_text = f"CONTENT:\n{fallback_text[:10000]}\n\n" + prompt_text
+    else:
+        prompt_text = f"Identify the main topics and subtopics for the subject '{subject_name}' that could be tested in an exam."
 
     prompt_text += """
     Return the result as a JSON array of objects with the following structure:
@@ -120,7 +134,7 @@ def analyze_content(file_uri, subject_name, fallback_text=None):
             # For latest SDK, we can pass `genai.get_file(file_uri)`
             print(f"Analyzing Gemini Remote File URI: {file_uri}")
             try:
-                gemini_file = genai.get_file(file_uri)
+                gemini_file = genai.get_file(extract_gemini_file_id(file_uri))
                 contents.insert(0, gemini_file)
             except Exception as fe:
                 print(f"Failed to fetch gemini file {file_uri}: {fe}. Attempting text fallback if available.")
@@ -193,6 +207,8 @@ def generate_questions(file_uri, params, fallback_text=None):
     question_types_str = ", ".join(question_types)
     
     prompt_text = f"Generate {num_questions} exam questions for the subject '{subject}' covering {topics_str}."
+    if file_uri or fallback_text:
+        prompt_text += " Base the questions on the provided content."
     if fallback_text and not file_uri:
          prompt_text = f"CONTENT:\n{fallback_text[:15000]}\n\n" + prompt_text
 
@@ -234,7 +250,7 @@ def generate_questions(file_uri, params, fallback_text=None):
         contents = [prompt_text]
         if file_uri:
              try:
-                 gemini_file = genai.get_file(file_uri)
+                 gemini_file = genai.get_file(extract_gemini_file_id(file_uri))
                  contents.insert(0, gemini_file)
              except Exception as fe:
                  print(f"Failed to fetch gemini file {file_uri} during questions: {fe}")
@@ -706,15 +722,9 @@ def upload_file():
     if file_uri:
          # Best Case: Direct Browser Upload bypass limit
          print(f"Received proxy file_uri from frontend: {file_uri}")
-    else:
+    elif 'file' in request.files and request.files['file'].filename != '':
         # Fallback Case: Standard multipart/form-data payload
-        if 'file' not in request.files:
-            return jsonify({"error": "No file part or file_uri provided"}), 400
-        
         file = request.files['file']
-        
-        if file.filename == '':
-            return jsonify({"error": "No selected file"}), 400
         
         filename_str = secure_filename(file.filename)
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename_str)
@@ -730,6 +740,8 @@ def upload_file():
                      fallback_text = f.read()
              else:
                  return jsonify({"error": "Failed to proxy file to Gemini API constraints."}), 500
+    else:
+        print("No file provided. Generating based on subject only.")
     
     # Analyze content
     analysis_result = analyze_content(file_uri, subject_name, fallback_text=fallback_text)

@@ -269,15 +269,14 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function validateInputs() {
         const subjectFilled = subjectInput.value.trim() !== '';
-        const fileUploaded = state.uploadedFile !== null;
-
-        analyzeBtn.disabled = !(subjectFilled && fileUploaded);
+        // Allow generating without file if subject is filled
+        analyzeBtn.disabled = !subjectFilled;
     }
 
     // Content Analysis
     async function handleAnalyze() {
-        if (!state.uploadedFile || !subjectInput.value.trim()) {
-            showToast('Error', 'Please upload a file and enter a subject name.');
+        if (!subjectInput.value.trim()) {
+            showToast('Error', 'Please enter a subject name.');
             return;
         }
 
@@ -288,15 +287,18 @@ document.addEventListener('DOMContentLoaded', function () {
             const file = state.uploadedFile;
             const apiKey = window.gemini ? window.gemini.getApiKey() : (document.getElementById('api-key-input')?.value?.trim() || '');
             
-            // We need an array buffer to upload natively
-            const arrayBuffer = await file.arrayBuffer();
-
+            let arrayBuffer = null;
             let uploadResponseData = null;
             let fileUri = null;
-            let mimeType = file.type;
+            let mimeType = file ? file.type : null;
 
-            // If we have an API key, we upload directly from Browser
-            if (apiKey) {
+            if (file) {
+                // We need an array buffer to upload natively
+                arrayBuffer = await file.arrayBuffer();
+            }
+
+            // If we have an API key and a file, we upload directly from Browser
+            if (apiKey && file) {
                 console.log("Starting Browser-Direct Upload to Gemini...");
                 const uploadRes = await fetch(`https://generativelanguage.googleapis.com/upload/v1beta/files?uploadType=media&key=${apiKey}`, {
                     method: 'POST',
@@ -322,7 +324,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 formData.append('file_uri', fileUri);
                 formData.append('mime_type', mimeType);
                 formData.append('filename', file.name);
-            } else {
+            } else if (file) {
                  // Fallback to Vercel native upload (will fail if > 4.5MB)
                  formData.append('file', file);
             }
@@ -357,12 +359,12 @@ document.addEventListener('DOMContentLoaded', function () {
             state.subject = subjectInput.value.trim();
             state.topics = data.topics || [];
             state.selectedTopics = [...state.topics]; // Initially select all
-            state.fileName = data.filename || file.name; 
+            state.fileName = data.filename || (file ? file.name : "No file attached"); 
             state.fileUri = data.file_uri || fileUri; // Store the URI for later question generation
             state.mimeType = data.mime_type || mimeType;
 
             // Update content preview
-            contentPreview.textContent = data.content_preview || "Content analyzed successfully via Gemini native upload.";
+            contentPreview.textContent = data.content_preview || "Content analyzed successfully.";
 
             // Render topics in step 2
             renderTopics();
@@ -441,8 +443,8 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
 
-        if (!state.fileName) {
-            showToast('Error', 'No file available. Please upload a file first.');
+        if (!state.subject) {
+            showToast('Error', 'No subject available. Please provide a subject first.');
             navigateToStep(1);
             return;
         }
