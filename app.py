@@ -766,7 +766,8 @@ def upload_file():
     analysis_result = analyze_content(file_uri, subject_name, fallback_text=fallback_text, subject_details=subject_details)
     
     if not analysis_result['success']:
-        return jsonify(analysis_result), 500
+        status_code = 429 if '429' in str(analysis_result.get('error', '')) or 'quota' in str(analysis_result.get('error', '')).lower() else 500
+        return jsonify(analysis_result), status_code
     
     return jsonify({
         "success": True,
@@ -819,7 +820,8 @@ def generate_questions_api():
     gen_result = {"questions": []} if num_to_generate <= 0 else generate_questions(file_uri, {**params, 'num_questions': num_to_generate}, fallback_text=fallback_text)
     
     if not gen_result.get('success', False) and num_to_generate > 0:
-        return jsonify(gen_result), 500
+        status_code = 429 if '429' in str(gen_result.get('error', '')) or 'quota' in str(gen_result.get('error', '')).lower() else 500
+        return jsonify(gen_result), status_code
     
     # Select questions from bank
     selected_questions = [] if num_from_bank <= 0 else select_questions_from_bank(question_bank, {**params, 'num_questions': num_from_bank})
