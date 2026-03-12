@@ -18,10 +18,10 @@ def init_app():
     app = Flask(__name__)
     CORS(app)
     app.secret_key = os.urandom(24)
-    app.config['UPLOAD_FOLDER'] = 'uploads/'
+    app.config['UPLOAD_FOLDER'] = '/tmp/uploads/'
     app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100 MB max file size
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-    os.makedirs('temp_outputs', exist_ok=True)
+    os.makedirs('/tmp/temp_outputs', exist_ok=True)
     return app
 
 app = init_app()
@@ -467,7 +467,7 @@ def generate_pdf(questions, exam_title, include_answers=False):
             pdf.ln(5)
         
         # Save to a temporary file
-        output_path = f"temp_outputs/exam_{str(uuid.uuid4())[:8]}.pdf"
+        output_path = f"/tmp/temp_outputs/exam_{str(uuid.uuid4())[:8]}.pdf"
         pdf.output(output_path)
         return output_path
         
@@ -482,7 +482,7 @@ def generate_pdf(questions, exam_title, include_answers=False):
         pdf.cell(0, 10, "An error occurred while generating the PDF.", 0, 1)
         pdf.cell(0, 10, f"Error: {str(e)}", 0, 1)
         
-        error_path = f"temp_outputs/error_{str(uuid.uuid4())[:8]}.pdf"
+        error_path = f"/tmp/temp_outputs/error_{str(uuid.uuid4())[:8]}.pdf"
         pdf.output(error_path)
         return error_path
 
@@ -580,7 +580,7 @@ def generate_html(questions, exam_title, include_answers=False):
         """
         
         # Save to a temporary file
-        output_path = f"temp_outputs/exam_{str(uuid.uuid4())[:8]}.html"
+        output_path = f"/tmp/temp_outputs/exam_{str(uuid.uuid4())[:8]}.html"
         with open(output_path, 'w', encoding='utf-8') as f:
             f.write(html)
         return output_path
@@ -602,7 +602,7 @@ def generate_html(questions, exam_title, include_answers=False):
         </html>
         """
         
-        error_path = f"temp_outputs/error_{str(uuid.uuid4())[:8]}.html"
+        error_path = f"/tmp/temp_outputs/error_{str(uuid.uuid4())[:8]}.html"
         with open(error_path, 'w', encoding='utf-8') as f:
             f.write(html)
         return error_path
@@ -662,7 +662,7 @@ def generate_markdown(questions, exam_title, include_answers=False):
             md += "---\n\n"
         
         # Save to a temporary file
-        output_path = f"temp_outputs/exam_{str(uuid.uuid4())[:8]}.md"
+        output_path = f"/tmp/temp_outputs/exam_{str(uuid.uuid4())[:8]}.md"
         with open(output_path, 'w', encoding='utf-8') as f:
             f.write(md)
         return output_path
@@ -672,7 +672,7 @@ def generate_markdown(questions, exam_title, include_answers=False):
         # Create a simple error markdown
         md = f"# Error Generating Markdown\n\nAn error occurred while generating the markdown document.\n\nError: {str(e)}\n"
         
-        error_path = f"temp_outputs/error_{str(uuid.uuid4())[:8]}.md"
+        error_path = f"/tmp/temp_outputs/error_{str(uuid.uuid4())[:8]}.md"
         with open(error_path, 'w', encoding='utf-8') as f:
             f.write(md)
         return error_path
@@ -858,12 +858,12 @@ def convert_html_to_pdf():
     
     try:
         # Save HTML to temporary file
-        html_path = f"temp_outputs/temp_{str(uuid.uuid4())[:8]}.html"
+        html_path = f"/tmp/temp_outputs/temp_{str(uuid.uuid4())[:8]}.html"
         with open(html_path, 'w', encoding='utf-8') as f:
             f.write(html_content)
         
         # Convert to PDF
-        pdf_path = f"temp_outputs/exam_{str(uuid.uuid4())[:8]}.pdf"
+        pdf_path = f"/tmp/temp_outputs/exam_{str(uuid.uuid4())[:8]}.pdf"
         pdfkit.from_file(html_path, pdf_path)
         
         # Clean up HTML file
@@ -904,7 +904,7 @@ def handle_exception(e):
 # Create necessary directories and files if they don't exist
 def ensure_directories():
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-    os.makedirs('temp_outputs', exist_ok=True)
+    os.makedirs('/tmp/temp_outputs', exist_ok=True)
 
 @app.before_request
 def configure_gemini_for_request():
