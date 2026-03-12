@@ -6,8 +6,8 @@ class GeminiClient {
     constructor(config = {}) {
         this.config = {
             needsRealTimeData: false,
-            fallbackModel: 'gemini-3.1-flash-lite',
-            primaryModel: 'gemini-3.1-pro',
+            fallbackModel: 'gemini-3.1-flash-lite-preview',
+            primaryModel: 'gemini-3.1-pro-preview',
             ...config
         };
         
