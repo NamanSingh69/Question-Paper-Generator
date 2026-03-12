@@ -2,6 +2,10 @@ from flask import Flask, request, jsonify, send_file, g
 import os
 import json
 import uuid
+import re
+import random
+import textwrap
+from datetime import datetime
 import google.generativeai as genai
 from werkzeug.utils import secure_filename
 import tempfile
