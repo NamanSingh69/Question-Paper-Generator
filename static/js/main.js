@@ -15,6 +15,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const fileInput = document.getElementById('file-input');
     const dragDropArea = document.getElementById('drag-drop-area');
     const subjectInput = document.getElementById('subject-input');
+    const subjectDetailsInput = document.getElementById('subject-details-input');
     const analyzeBtn = document.getElementById('analyze-btn');
     const fileDetails = document.getElementById('file-details');
     const fileName = document.getElementById('file-name');
@@ -316,6 +317,9 @@ document.addEventListener('DOMContentLoaded', function () {
             // STEP 2: Send the File URI (or the file itself if no key) to our Backend
             const formData = new FormData();
             formData.append('subject', subjectInput.value.trim());
+            if (subjectDetailsInput) {
+                formData.append('subject_details', subjectDetailsInput.value.trim());
+            }
             
             if (fileUri) {
                 // If direct upload succeeded, just send the URI and metadata
@@ -355,6 +359,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
             // Update state
             state.subject = subjectInput.value.trim();
+            if (subjectDetailsInput) {
+                 state.subjectDetails = subjectDetailsInput.value.trim();
+            }
             state.topics = data.topics || [];
             state.selectedTopics = [...state.topics]; // Initially select all
             state.fileName = data.filename || (file ? file.name : "No file attached"); 
@@ -469,6 +476,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 file_uri: state.fileUri || null,
                 mime_type: state.mimeType || null,
                 subject: state.subject,
+                subject_details: state.subjectDetails || '',
                 topics: topics,
                 difficulty: difficulty,
                 question_types: questionTypes,

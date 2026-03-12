@@ -105,14 +105,21 @@ def process_file_to_gemini(file_path, display_name=None):
         return None
 
 # --- Question Generation Functions ---
-def analyze_content(file_uri, subject_name, fallback_text=None):
+def analyze_content(file_uri, subject_name, fallback_text=None, subject_details=''):
     """Analyze the content to identify topics and potential question areas."""
     if file_uri or fallback_text:
-        prompt_text = f"Based on the attached content for the subject '{subject_name}', identify the main topics and subtopics that could be tested in an exam."
+        prompt_text = f"Based on the attached content for the subject '{subject_name}'"
+        if subject_details:
+             prompt_text += f" (Context & Instructions: {subject_details})"
+        prompt_text += ", identify the main topics and subtopics that could be tested in an exam."
         if fallback_text and not file_uri:
             prompt_text = f"CONTENT:\n{fallback_text[:10000]}\n\n" + prompt_text
     else:
-        prompt_text = f"Identify the main topics and subtopics for the subject '{subject_name}' that could be tested in an exam."
+        prompt_text = f"Identify the main topics and subtopics for the subject '{subject_name}'"
+        if subject_details:
+             prompt_text += f" given this context: {subject_details}."
+        else:
+             prompt_text += " that could be tested in an exam."
 
     prompt_text += """
     Return the result as a JSON array of objects with the following structure:
@@ -202,6 +209,7 @@ def analyze_content(file_uri, subject_name, fallback_text=None):
 def generate_questions(file_uri, params, fallback_text=None):
     """Generate questions based on content and specified parameters."""
     subject = params.get('subject', 'General')
+    subject_details = params.get('subject_details', '')
     topics = params.get('topics', [])
     difficulty = params.get('difficulty', 'Medium')
     question_types = params.get('question_types', ['MCQ', 'Short Answer'])
@@ -211,8 +219,11 @@ def generate_questions(file_uri, params, fallback_text=None):
     question_types_str = ", ".join(question_types)
     
     prompt_text = f"Generate {num_questions} exam questions for the subject '{subject}' covering {topics_str}."
+    if subject_details:
+         prompt_text += f"\nSTRICT CONTEXT AND INSTRUCTIONS FOR GENERATION: {subject_details}\n"
+         
     if file_uri or fallback_text:
-        prompt_text += " Base the questions on the provided content."
+        prompt_text += " Base the questions primarily on the provided content document."
     if fallback_text and not file_uri:
          prompt_text = f"CONTENT:\n{fallback_text[:15000]}\n\n" + prompt_text
 
@@ -718,6 +729,7 @@ def get_models():
 def upload_file():
     # Retrieve form data
     subject_name = request.form.get('subject', 'General Subject')
+    subject_details = request.form.get('subject_details', '')
     file_uri = request.form.get('file_uri')
     mime_type = request.form.get('mime_type')
     filename_str = request.form.get('filename')
@@ -751,7 +763,7 @@ def upload_file():
         print("No file provided. Generating based on subject only.")
     
     # Analyze content
-    analysis_result = analyze_content(file_uri, subject_name, fallback_text=fallback_text)
+    analysis_result = analyze_content(file_uri, subject_name, fallback_text=fallback_text, subject_details=subject_details)
     
     if not analysis_result['success']:
         return jsonify(analysis_result), 500
@@ -784,6 +796,7 @@ def generate_questions_api():
     
     params = {
         'subject': getattr(data, 'subject', 'General'),
+        'subject_details': getattr(data, 'subject_details', req_json.get('subject_details', '')),
         'topics': getattr(data, 'topics', []),
         'difficulty': getattr(data, 'difficulty', 'Medium'),
         'question_types': getattr(data, 'question_types', ['MCQ']),
