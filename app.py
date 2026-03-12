@@ -283,14 +283,19 @@ def generate_questions(file_uri, params, fallback_text=None):
         # Fallback Strategy: Complete scrub
         if not json_content:
             json_content = result.strip()
+            
+        # UNIVERSAL CLEANUP for trailing commas and literal newlines
+        if json_content:
             json_content = json_content.replace('\n', ' ')
-            json_content = re.sub(r'(?<!\\)`', '"', json_content) # replace internal backticks with quotes
+            json_content = json_content.replace('\r', ' ')
+            json_content = re.sub(r',\s*\}', '}', json_content)
+            json_content = re.sub(r',\s*\]', ']', json_content)
             
         # Parse the JSON
         try:
             questions = json.loads(json_content)
         except json.JSONDecodeError as e:
-            print(f"JSON decoding error for questions: {str(e)}")
+            print(f"JSON decoding error for selected questions: {str(e)}")
             print(f"Attempted to parse: {json_content[:500]}...")
             
             # Create fallback questions if JSON parsing fails
