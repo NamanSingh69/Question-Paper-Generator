@@ -6,12 +6,11 @@ const path = require('path');
     const browser = await puppeteer.launch({ headless: true });
     const page = await browser.newPage();
     
-    // Create a sample test file
-    const filePath = path.join(__dirname, 'sample-test.txt');
-    fs.writeFileSync(filePath, "This is a dummy test text with enough content to be uploaded for testing purposes. Let's see some questions generated!");
+    // Use the existing 150-word test document to pass word count validation
+    const filePath = path.join(__dirname, 'test_upload.txt');
 
     console.log('Navigating to website...');
-    await page.goto('https://question-paper-generator-cguzcajme.vercel.app', { waitUntil: 'networkidle2' });
+    await page.goto('https://question-paper-generator-mu.vercel.app', { waitUntil: 'networkidle2' });
 
     console.log('Setting subject...');
     await page.type('#subject-input', 'Computer Science');

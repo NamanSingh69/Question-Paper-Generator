@@ -6,17 +6,17 @@ class GeminiClient {
     constructor(config = {}) {
         this.config = {
             needsRealTimeData: false,
-            fallbackModel: 'gemini-2.5-flash',
-            primaryModel: 'gemini-2.5-pro',
+            fallbackModel: 'gemini-3.1-flash-lite-preview',
+            primaryModel: 'gemini-3.1-pro-preview',
             ...config
         };
         
         // Define rate limits per tier
         this.limits = {
             free: {
-                requestsPerMin: 15,
+                requestsPerMin: 15,    // Safe conservative average across models
                 tokensPerMin: 1000000,
-                requestsPerDay: 1500
+                requestsPerDay: 1500   // Upper bound for Flash Lite Free Tier
             }
         };
 
@@ -65,12 +65,12 @@ class GeminiClient {
             this.selectedModel = this.config.fallbackModel;
             select.value = this.selectedModel;
             // Disable dropdown in fast mode normally, but user might want to pick a specific flash version
-            select.disabled = true;
+            select.disabled = false;
             
             // Temporary add the option if it doesn't exist
             let exists = Array.from(select.options).some(o => o.value === this.config.fallbackModel);
             if (!exists) {
-                const opt = new Option('Gemini 2.5 Flash', this.config.fallbackModel);
+                const opt = new Option('Gemini 3.1 Flash Lite', this.config.fallbackModel);
                 select.options.add(opt);
                 select.value = this.config.fallbackModel;
             }

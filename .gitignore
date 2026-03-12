@@ -39,3 +39,5 @@ Thumbs.db
 
 # Testing
 .pytest_cache/
+.vercel
+.env*.local

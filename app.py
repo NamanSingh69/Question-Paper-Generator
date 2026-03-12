@@ -266,34 +266,32 @@ def generate_questions(file_uri, params, fallback_text=None):
         
         print(f"Raw questions response from Gemini API: {result[:100]}...")
         
-        # Try to extract JSON from the response
+        # Robust RegEx parsing specifically targeting the JSON array, ignoring AI conversational filler
         json_content = None
         
-        # Check if response contains JSON enclosed in ```json ... ```
-        json_match = re.search(r'```json\s*(.*?)\s*```', result, re.DOTALL)
+        # Strategy 1: Find standard code block markdown
+        json_match = re.search(r'```(?:json)?\s*(\[.*?\])\s*```', result, re.DOTALL | re.IGNORECASE)
         if json_match:
             json_content = json_match.group(1).strip()
             
-        # If not found in code blocks, try to find JSON array directly
+        # Strategy 2: Greedily capture the largest JSON array directly
         if not json_content:
-            json_match = re.search(r'\[\s*{.*}\s*\]', result, re.DOTALL)
+            json_match = re.search(r'\[\s*{.*?}\s*\]', result, re.DOTALL)
             if json_match:
                 json_content = json_match.group(0).strip()
         
-        # If still not found, use the entire response
+        # Fallback Strategy: Complete scrub
         if not json_content:
             json_content = result.strip()
+            json_content = json_content.replace('\n', ' ')
+            json_content = re.sub(r'(?<!\\)`', '"', json_content) # replace internal backticks with quotes
             
-        # Clean the JSON content
-        json_content = json_content.replace('\n', ' ')
-        json_content = re.sub(r'```.*?```', '', json_content, flags=re.DOTALL)
-        
         # Parse the JSON
         try:
             questions = json.loads(json_content)
         except json.JSONDecodeError as e:
             print(f"JSON decoding error for questions: {str(e)}")
-            print(f"Attempted to parse: {json_content[:100]}...")
+            print(f"Attempted to parse: {json_content[:500]}...")
             
             # Create fallback questions if JSON parsing fails
             questions = []

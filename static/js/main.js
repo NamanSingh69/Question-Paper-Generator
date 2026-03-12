@@ -87,9 +87,9 @@ document.addEventListener('DOMContentLoaded', function () {
     const apiKeyInput = document.getElementById('api-key-input');
 
     const DAILY_LIMITS = {
-        "pro": { "3.1": 50, "2.5": 25 },
-        "flash": { "3.1": 500, "2.5": 250 },
-        "flash-lite": { "3.1": 1000, "2.5": 500 }
+        "pro": { "3.1": 50, "2.5": 50 },
+        "flash": { "3.1": 1500, "2.5": 1500 },
+        "flash-lite": { "3.1": 1500, "2.5": 1500 }
     };
 
     function updateQuotaDisplay() {
@@ -155,8 +155,8 @@ document.addEventListener('DOMContentLoaded', function () {
             modeProBtn.style.color = '';
 
             modelSelect.innerHTML = `
-                <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
                 <option value="gemini-3.1-flash-lite-preview">Gemini 3.1 Flash Lite</option>
+                <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
             `;
         }
 
