@@ -245,7 +245,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             if (!response.ok) {
                 if (response.status === 429) {
-                    throw new Error("⏳ Rate limit reached — try again in ~1 minute, or switch to Fast mode.");
+                    throw new Error("⏳ Rate limit exhausted across all models — please try again in a few minutes.");
                 }
                 throw new Error(data.error || 'Failed to analyze file');
             }
@@ -396,7 +396,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             if (!response.ok) {
                 if (response.status === 429) {
-                    throw new Error("⏳ Rate limit reached — try again in ~1 minute, or switch to Fast mode.");
+                    throw new Error("⏳ Rate limit exhausted across all models — please try again in a few minutes.");
                 }
                 const errorText = await response.text();
                 throw new Error(`Server error (${response.status}): ${errorText}`);

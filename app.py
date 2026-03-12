@@ -32,9 +32,9 @@ app = init_app()
 
 # Model fallback cascade — best quality first, faster fallback on error
 MODEL_CASCADE = [
+    "gemini-3.1-pro-preview",
+    "gemini-3.1-flash-lite-preview",
     "gemini-2.5-pro",
-    "gemini-2.5-flash",
-    "gemini-flash-latest",
 ]
 
 # --- API Configuration ---
@@ -158,7 +158,7 @@ def analyze_content(file_uri, subject_name, fallback_text=None, subject_details=
             error_str = str(e).lower()
             if '429' in error_str or 'quota' in error_str:
                 print("⚠️ Primary model quota exceeded! Falling back to Gemini 3.1 Flash Lite...")
-                fallback_model = genai.GenerativeModel('gemini-3.1-flash-lite')
+                fallback_model = genai.GenerativeModel('gemini-3.1-flash-lite-preview')
                 response = fallback_model.generate_content(contents)
             else:
                 raise e
@@ -288,7 +288,7 @@ def generate_questions(file_uri, params, fallback_text=None):
             error_str = str(e).lower()
             if '429' in error_str or 'quota' in error_str:
                 print("⚠️ Primary model quota exceeded during generation! Falling back to Gemini 3.1 Flash Lite...")
-                fallback_model = genai.GenerativeModel('gemini-3.1-flash-lite')
+                fallback_model = genai.GenerativeModel('gemini-3.1-flash-lite-preview')
                 response = fallback_model.generate_content(contents)
             else:
                 raise e
