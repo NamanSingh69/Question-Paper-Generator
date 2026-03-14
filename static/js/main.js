@@ -577,7 +577,8 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         // Add answer section (initially hidden)
-        if (question.correct_answer) {
+        const ans = question.correct_answer || question.answer || question.expected_answer;
+        if (ans) {
             const answerContainer = document.createElement('div');
             answerContainer.className = 'answer-container mt-3 pt-3 border-top d-none answer-section';
 
@@ -586,7 +587,7 @@ document.addEventListener('DOMContentLoaded', function () {
             answerLabel.textContent = 'Answer:';
 
             const answerText = document.createElement('p');
-            answerText.textContent = question.correct_answer;
+            answerText.textContent = ans;
 
             answerContainer.appendChild(answerLabel);
             answerContainer.appendChild(answerText);

@@ -488,8 +488,8 @@ def generate_pdf(questions, exam_title, include_answers=False):
                 pdf.set_font("Arial", "", 10)
                 
                 # Get answer and ensure it's not None
-                answer_text = q.get('correct_answer', '')
-                if answer_text is None:
+                answer_text = q.get('correct_answer') or q.get('answer') or q.get('expected_answer') or ''
+                if not answer_text:
                     answer_text = "Answer not available"
                     
                 # Convert to string if it's not already
@@ -607,8 +607,8 @@ def generate_html(questions, exam_title, include_answers=False):
                 html += '</div>'
             
             # Add answer section
-            answer_text = q.get('correct_answer', '')
-            if answer_text is None:
+            answer_text = q.get('correct_answer') or q.get('answer') or q.get('expected_answer') or ''
+            if not answer_text:
                 answer_text = "Answer not available"
                 
             explanation_text = q.get('explanation', '')
@@ -703,8 +703,8 @@ def generate_markdown(questions, exam_title, include_answers=False):
             
             # Add answer section if requested
             if include_answers:
-                answer_text = q.get('correct_answer', '')
-                if answer_text is None:
+                answer_text = q.get('correct_answer') or q.get('answer') or q.get('expected_answer') or ''
+                if not answer_text:
                     answer_text = "Answer not available"
                     
                 md += f"**Answer:** {answer_text}\n\n"
