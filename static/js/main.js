@@ -87,18 +87,7 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    // Initialize UI
-    setModeUI(currentMode);
 
-    // Helper for API headers
-    function getApiHeaders() {
-        const headers = {};
-        const apiKey = document.getElementById('api-key-input')?.value?.trim();
-        if (apiKey) headers['X-Gemini-Api-Key'] = apiKey;
-        const modelName = document.getElementById('model-select')?.value;
-        if (modelName) headers['X-Gemini-Model-Name'] = modelName;
-        return headers;
-    }
 
     // File Upload Handlers
     function handleFileSelect(e) {
