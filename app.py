@@ -732,6 +732,11 @@ def generate_markdown(questions, exam_title, include_answers=False):
         return error_path
 
 # --- API Routes ---
+@app.route('/')
+def index():
+    """Serve the UI when running locally (Vercel serves static/index.html directly)."""
+    return app.send_static_file('index.html')
+
 @app.route('/api/health')
 def health_check():
     return jsonify({"status": "healthy", "service": "Question Paper Gen API"})
