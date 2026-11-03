@@ -5,7 +5,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-Flask-000000?style=flat-square&logo=flask&logoColor=white" alt="Flask">
   <img src="https://img.shields.io/badge/Gemini-Files_API-8E75B2?style=flat-square&logo=googlegemini&logoColor=white" alt="Gemini">
-  <img src="https://img.shields.io/badge/E2E-Playwright-2EAD33?style=flat-square&logo=playwright&logoColor=white" alt="Playwright end-to-end tests">
+  <img src="https://img.shields.io/badge/Tests-pytest_+_Playwright-2EAD33?style=flat-square&logo=pytest&logoColor=white" alt="pytest and Playwright tests">
   <img src="https://img.shields.io/badge/Export-PDF_·_HTML_·_Markdown-f59e0b?style=flat-square" alt="PDF, HTML and Markdown export">
 </p>
 
@@ -55,11 +55,11 @@ installed. The standard PDF export does not need it.
 
 ## Tests
 
-End-to-end browser tests (Playwright) cover upload validation, the step-by-step flow and
-44 px touch targets on mobile:
-
 ```bash
-npx playwright test tests/
+pip install pytest
+pytest tests/test_app.py      # offline API tests, Gemini mocked: health, subject-only upload,
+                              # 429 quota mapping, default generation, Markdown export
+npx playwright test tests/    # browser: upload validation, step flow, 44 px touch targets on mobile
 ```
 
 ## API
